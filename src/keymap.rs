@@ -538,8 +538,8 @@ impl<'b> InputState<'b> {
         let (n, positive) = self.emacs_num_args(); // consume them in all cases
 
         let mut evt = key.into();
-        if let Some(cmd) = self.custom_binding(wrt, &evt, n, positive) {
-            return Ok(if cmd.is_repeatable() {
+        if let Some((cmd, should_redo)) = self.custom_binding(wrt, &evt, n, positive) {
+            return Ok(if should_redo && cmd.is_repeatable() {
                 cmd.redo(Some(n), wrt)
             } else {
                 cmd
@@ -710,8 +710,8 @@ impl<'b> InputState<'b> {
         let no_num_args = self.num_args == 0;
         let n = self.vi_num_args(); // consume them in all cases
         let evt = key.into();
-        if let Some(cmd) = self.custom_binding(wrt, &evt, n, true) {
-            return Ok(if cmd.is_repeatable() {
+        if let Some((cmd, should_redo)) = self.custom_binding(wrt, &evt, n, true) {
+            return Ok(if should_redo && cmd.is_repeatable() {
                 if no_num_args {
                     cmd.redo(None, wrt)
                 } else {
@@ -887,8 +887,8 @@ impl<'b> InputState<'b> {
         key: KeyEvent,
     ) -> Result<Cmd> {
         let evt = key.into();
-        if let Some(cmd) = self.custom_binding(wrt, &evt, 0, true) {
-            return Ok(if cmd.is_repeatable() {
+        if let Some((cmd, should_redo)) = self.custom_binding(wrt, &evt, 0, true) {
+            return Ok(if should_redo && cmd.is_repeatable() {
                 cmd.redo(None, wrt)
             } else {
                 cmd
@@ -1142,21 +1142,25 @@ impl<'b> InputState<'b> {
 #[cfg(feature = "custom-bindings")]
 impl InputState<'_> {
     /// Application customized binding
+    /// Returns `(cmd, should_redo)`.
+    /// `Simple` handlers return `should_redo = true` (they store a template).
+    /// `Conditional` handlers return `should_redo = false` (they already
+    /// computed the exact command).
     fn custom_binding(
         &self,
         wrt: &dyn Refresher,
         evt: &Event,
         n: RepeatCount,
         positive: bool,
-    ) -> Option<Cmd> {
+    ) -> Option<(Cmd, bool)> {
         let bindings = self.custom_bindings;
         let handler = bindings.get(evt).or_else(|| bindings.get(&Event::Any));
         if let Some(handler) = handler {
             match handler {
-                EventHandler::Simple(cmd) => Some(cmd.clone()),
+                EventHandler::Simple(cmd) => Some((cmd.clone(), true)),
                 EventHandler::Conditional(handler) => {
                     let ctx = EventContext::new(self, wrt);
-                    handler.handle(evt, n, positive, &ctx)
+                    handler.handle(evt, n, positive, &ctx).map(|cmd| (cmd, false))
                 }
             }
         } else {
