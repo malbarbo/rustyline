@@ -1054,18 +1054,43 @@ impl Renderer for PosixRenderer {
             self.clear_old_rows(old_layout);
         }
 
+        let cont_raw = prompt.continuation_raw();
+        let cont_styled = prompt.continuation_styled();
+
         if let Some(highlighter) = highlighter {
             // display the prompt
             self.buffer
                 .push_str(&highlighter.highlight_prompt(prompt.styled(), default_prompt));
-            // display the input line
-            self.buffer
-                .push_str(&highlighter.highlight(line, line.pos()));
+            // display the input line, inserting continuation prompts after \n
+            let highlighted = highlighter.highlight(line, line.pos());
+            if cont_styled.is_empty() {
+                self.buffer.push_str(&highlighted);
+            } else {
+                for (i, part) in highlighted.split('\n').enumerate() {
+                    if i > 0 {
+                        self.buffer.push('\n');
+                        self.buffer.push_str(
+                            &highlighter.highlight_prompt(cont_styled, false),
+                        );
+                    }
+                    self.buffer.push_str(part);
+                }
+            }
         } else {
             // display the prompt
             self.buffer.push_str(prompt.raw());
-            // display the input line
-            self.buffer.push_str(line);
+            // display the input line, inserting continuation prompts after \n
+            if cont_raw.is_empty() {
+                self.buffer.push_str(line);
+            } else {
+                for (i, part) in line.as_str().split('\n').enumerate() {
+                    if i > 0 {
+                        self.buffer.push('\n');
+                        self.buffer.push_str(cont_raw);
+                    }
+                    self.buffer.push_str(part);
+                }
+            }
         }
         // display hint
         if let Some(hint) = hint {
@@ -1107,13 +1132,18 @@ impl Renderer for PosixRenderer {
 
     /// Control characters are treated as having zero width.
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        continuation_prompt_width: Unit,
+    ) -> Position {
         let mut pos = orig;
         let mut esc_seq = 0;
         for c in s.graphemes(true) {
             if c == "\n" {
                 pos.row += 1;
-                pos.col = 0;
+                pos.col = continuation_prompt_width;
                 continue;
             }
             let cw = if c == "\t" {
@@ -1719,7 +1749,7 @@ mod test {
             GraphemeClusterMode::default(),
             BellStyle::default(),
         );
-        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default());
+        let pos = out.calculate_position("\x1b[1;32m>>\x1b[0m ", Position::default(), 0);
         assert_eq!(3, pos.col);
         assert_eq!(0, pos.row);
     }
@@ -1748,10 +1778,10 @@ mod test {
         );
         let prompt = "> ";
         let default_prompt = true;
-        let prompt_size = out.calculate_position(prompt, Position::default());
+        let prompt_size = out.calculate_position(prompt, Position::default(), 0);
 
         let mut line = LineBuffer::init("", 0);
-        let old_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let old_layout = out.compute_layout(prompt_size, 0, default_prompt, &line, None);
         assert_eq!(Position { col: 2, row: 0 }, old_layout.cursor);
         assert_eq!(old_layout.cursor, old_layout.end);
 
@@ -1759,7 +1789,7 @@ mod test {
             Some(true),
             line.insert('a', out.cols - prompt_size.col + 1, &mut NoListener)
         );
-        let new_layout = out.compute_layout(prompt_size, default_prompt, &line, None);
+        let new_layout = out.compute_layout(prompt_size, 0, default_prompt, &line, None);
         assert_eq!(Position { col: 1, row: 1 }, new_layout.cursor);
         assert_eq!(new_layout.cursor, new_layout.end);
         out.refresh_line(prompt, &line, None, Some(&old_layout), &new_layout, None)

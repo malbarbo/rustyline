@@ -14,6 +14,20 @@ pub trait Prompt {
     fn styled(&self) -> &str {
         self.raw()
     }
+    /// Continuation prompt (raw) shown before each continuation line in
+    /// multi-line input. Must have the same display width as [`raw()`].
+    ///
+    /// By default, returns empty string (no continuation prompt).
+    fn continuation_raw(&self) -> &str {
+        ""
+    }
+    /// Continuation prompt (styled). Must have the same display width as
+    /// [`continuation_raw()`].
+    ///
+    /// By default, returns [`continuation_raw()`].
+    fn continuation_styled(&self) -> &str {
+        self.continuation_raw()
+    }
 }
 
 impl Prompt for str {
