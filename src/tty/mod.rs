@@ -65,21 +65,23 @@ pub trait Renderer {
     fn compute_layout(
         &self,
         prompt_size: Position,
+        continuation_prompt_width: Unit,
         default_prompt: bool,
         line: &LineBuffer,
         info: Option<&str>,
     ) -> Layout {
         // calculate the desired position of the cursor
         let pos = line.pos();
-        let cursor = self.calculate_position(&line[..pos], prompt_size);
+        let cursor =
+            self.calculate_position(&line[..pos], prompt_size, continuation_prompt_width);
         // calculate the position of the end of the input line
         let mut end = if pos == line.len() {
             cursor
         } else {
-            self.calculate_position(&line[pos..], cursor)
+            self.calculate_position(&line[pos..], cursor, continuation_prompt_width)
         };
         if let Some(info) = info {
-            end = self.calculate_position(info, end);
+            end = self.calculate_position(info, end, 0);
         }
 
         let new_layout = Layout {
@@ -97,7 +99,14 @@ pub trait Renderer {
 
     /// Calculate the number of columns and rows used to display `s` on a
     /// `cols` width terminal starting at `orig`.
-    fn calculate_position(&self, s: &str, orig: Position) -> Position;
+    /// `continuation_prompt_width` is added after each `\n` to account for
+    /// continuation prompts in multi-line input.
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        continuation_prompt_width: Unit,
+    ) -> Position;
 
     fn write_and_flush(&mut self, buf: &str) -> Result<()>;
 

@@ -23,9 +23,10 @@ use RefreshKind::All;
 /// Implement rendering.
 pub struct State<'out, 'prompt, H: Helper, P: Prompt + ?Sized> {
     pub out: &'out mut <Terminal as Term>::Writer,
-    prompt: &'prompt P,    // Prompt to display (rl_prompt)
-    prompt_size: Position, // Prompt Unicode/visible width and height
-    pub line: LineBuffer,  // Edited line buffer
+    prompt: &'prompt P,                  // Prompt to display (rl_prompt)
+    prompt_size: Position,               // Prompt Unicode/visible width and height
+    continuation_prompt_width: Unit,     // Continuation prompt visible width
+    pub line: LineBuffer,                // Edited line buffer
     pub layout: Layout,
     saved_line_for_history: LineBuffer, // Current edited line before history browsing
     byte_buffer: [u8; 4],
@@ -58,12 +59,16 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
         helper: Option<&'out H>,
         ctx: Context<'out>,
     ) -> Self {
-        let prompt_size = out.calculate_position(prompt.raw(), Position::default());
+        let prompt_size = out.calculate_position(prompt.raw(), Position::default(), 0);
+        let continuation_prompt_width = out
+            .calculate_position(prompt.continuation_raw(), Position::default(), 0)
+            .col;
         let gcm = out.grapheme_cluster_mode();
         Self {
             out,
             prompt,
             prompt_size,
+            continuation_prompt_width,
             line: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
             layout: Layout::new(gcm),
             saved_line_for_history: LineBuffer::with_capacity(MAX_LINE).can_growth(true),
@@ -108,9 +113,19 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
                         if new_cols != old_cols
                             && (self.layout.end.row > 0 || self.layout.end.col >= new_cols)
                         {
-                            self.prompt_size = self
+                            self.prompt_size = self.out.calculate_position(
+                                self.prompt.raw(),
+                                Position::default(),
+                                0,
+                            );
+                            self.continuation_prompt_width = self
                                 .out
-                                .calculate_position(self.prompt.raw(), Position::default());
+                                .calculate_position(
+                                    self.prompt.continuation_raw(),
+                                    Position::default(),
+                                    0,
+                                )
+                                .col;
                             self.refresh_line()?;
                         }
                         continue;
@@ -141,7 +156,11 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
         // calculate the desired position of the cursor
         let cursor = self
             .out
-            .calculate_position(&self.line[..self.line.pos()], self.prompt_size);
+            .calculate_position(
+                &self.line[..self.line.pos()],
+                self.prompt_size,
+                self.continuation_prompt_width,
+            );
         if self.layout.cursor == cursor {
             return Ok(());
         }
@@ -199,7 +218,13 @@ impl<'out, 'prompt, H: Helper, P: Prompt + ?Sized> State<'out, 'prompt, H, P> {
         } else {
             let new_layout = self
                 .out
-                .compute_layout(prompt_size, default_prompt, &self.line, info);
+                .compute_layout(
+                    prompt_size,
+                    self.continuation_prompt_width,
+                    default_prompt,
+                    &self.line,
+                    info,
+                );
 
             debug!(target: "rustyline", "old layout: {:?}", self.layout);
             debug!(target: "rustyline", "new layout: {new_layout:?}");
@@ -299,7 +324,7 @@ impl<H: Helper, P: Prompt + ?Sized> Refresher for State<'_, '_, H, P> {
     }
 
     fn refresh_prompt_and_line(&mut self, prompt: &str) -> Result<()> {
-        let prompt_size = self.out.calculate_position(prompt, Position::default());
+        let prompt_size = self.out.calculate_position(prompt, Position::default(), 0);
         self.hint();
         self.highlight_char(CmdKind::Other);
         self.refresh(prompt, prompt_size, false, All, Info::Hint)
@@ -824,6 +849,7 @@ pub fn init_state<'out, H: Helper>(
         out,
         prompt: "",
         prompt_size: Position::default(),
+        continuation_prompt_width: 0,
         line: LineBuffer::init(line, pos),
         layout: Layout::default(),
         saved_line_for_history: LineBuffer::with_capacity(100),

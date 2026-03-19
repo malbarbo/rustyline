@@ -505,7 +505,12 @@ impl Renderer for ConsoleRenderer {
     }
 
     /// Characters with 2 column width are correctly handled (not split).
-    fn calculate_position(&self, s: &str, orig: Position) -> Position {
+    fn calculate_position(
+        &self,
+        s: &str,
+        orig: Position,
+        continuation_prompt_width: Unit,
+    ) -> Position {
         debug_assert!(
             memchr::memmem::find(s.as_bytes(), b"\x1b[").is_none(),
             "content should not be styled directly"
@@ -513,7 +518,7 @@ impl Renderer for ConsoleRenderer {
         let mut pos = orig;
         for c in s.graphemes(true) {
             if c == "\n" {
-                pos.col = 0;
+                pos.col = continuation_prompt_width;
                 pos.row += 1;
             } else {
                 let cw = self.grapheme_cluster_mode.width(c);
