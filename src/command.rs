@@ -61,8 +61,10 @@ pub fn execute<H: Helper, P: Prompt + ?Sized>(
         Cmd::ReplaceChar(n, c) => s.edit_replace_char(c, n)?,
         Cmd::Replace(mvt, text) => {
             s.edit_kill(&mvt, kill_ring)?;
-            if let Some(text) = text {
-                s.edit_insert_text(&text)?;
+            if let Some(ref text) = text {
+                s.edit_insert_text(text)?;
+                s.line.move_forward(text.chars().count() as u16);
+                s.refresh_line()?;
             }
         }
         Cmd::Overwrite(c) => {
