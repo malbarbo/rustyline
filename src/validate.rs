@@ -41,6 +41,12 @@ impl<'i> ValidationContext<'i> {
         self.i.input()
     }
 
+    /// Returns `true` if the cursor is at the end of the input.
+    #[must_use]
+    pub fn cursor_at_end(&self) -> bool {
+        self.i.cursor_at_end()
+    }
+
     // TODO
     //fn invoke(&mut self, cmd: Cmd) -> Result<?> {
     //    self.i.invoke(cmd)

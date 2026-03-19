@@ -363,6 +363,8 @@ pub struct InputState<'b> {
 pub trait Invoke {
     /// currently edited line
     fn input(&self) -> &str;
+    /// whether the cursor is at the end of the input
+    fn cursor_at_end(&self) -> bool;
     // TODO
     //fn invoke(&mut self, cmd: Cmd) -> Result<?>;
 }
@@ -370,6 +372,10 @@ pub trait Invoke {
 impl Invoke for &str {
     fn input(&self) -> &str {
         self
+    }
+
+    fn cursor_at_end(&self) -> bool {
+        true
     }
 }
 

@@ -308,6 +308,10 @@ impl<H: Helper, P: Prompt + ?Sized> Invoke for State<'_, '_, H, P> {
     fn input(&self) -> &str {
         self.line.as_str()
     }
+
+    fn cursor_at_end(&self) -> bool {
+        self.line.pos() == self.line.len()
+    }
 }
 
 impl<H: Helper, P: Prompt + ?Sized> Refresher for State<'_, '_, H, P> {
